@@ -1,0 +1,126 @@
+# Applies database migrations, deploys the App Service package and smoke tests /health.
+parameters:
+  - name: environment
+    type: string
+  - name: environmentName
+    type: string
+  - name: vmImageName
+    type: string
+    default: 'windows-latest'
+  - name: azureServiceConnection
+    type: string
+  - name: resourceGroupName
+    type: string
+  - name: dependsOnJob
+    type: string
+    default: 'DeployInfrastructure'
+
+jobs:
+  - deployment: DeployApplication
+    displayName: 'Deploy application (${{ parameters.environmentName }})'
+    dependsOn: ${{ parameters.dependsOnJob }}
+    environment: ${{ parameters.environment }}
+    pool:
+      vmImage: ${{ parameters.vmImageName }}
+    variables:
+      appServiceName: $[ dependencies.${{ parameters.dependsOnJob }}.outputs['DeployInfrastructure.deployBicep.appServiceName'] ]
+      healthCheckUrl: $[ dependencies.${{ parameters.dependsOnJob }}.outputs['DeployInfrastructure.deployBicep.healthCheckUrl'] ]
+      sqlServerFqdn: $[ dependencies.${{ parameters.dependsOnJob }}.outputs['DeployInfrastructure.deployBicep.sqlServerFqdn'] ]
+      sqlDatabaseName: $[ dependencies.${{ parameters.dependsOnJob }}.outputs['DeployInfrastructure.deployBicep.sqlDatabaseName'] ]
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: current
+              artifact: app-package
+
+            - download: current
+              artifact: migrations
+
+            - task: AzureCLI@2
+              displayName: 'Allow the pipeline agent through the SQL firewall'
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                scriptType: pscore
+                scriptLocation: inlineScript
+                inlineScript: |
+                  $ErrorActionPreference = 'Stop'
+                  $agentIp = (Invoke-RestMethod -Uri 'https://api.ipify.org?format=json').ip
+                  $server = "$(sqlServerFqdn)".Split('.')[0]
+                  az sql server firewall-rule create `
+                    --resource-group "${{ parameters.resourceGroupName }}" `
+                    --server $server `
+                    --name "pipeline-$(Build.BuildId)" `
+                    --start-ip-address $agentIp `
+                    --end-ip-address $agentIp `
+                    --output none
+
+            - task: PowerShell@2
+              displayName: 'Apply EF Core migrations (deployment-safe bundle)'
+              env:
+                # Secret is supplied by the variable group and never printed.
+                SQL_ADMIN_PASSWORD: $(sqlAdministratorPassword)
+              inputs:
+                pwsh: true
+                targetType: inline
+                script: |
+                  $ErrorActionPreference = 'Stop'
+                  $bundle = "$(Pipeline.Workspace)/migrations/efbundle.exe"
+                  if (-not (Test-Path $bundle)) { throw "Migration bundle not found at $bundle" }
+
+                  $connectionString = "Server=tcp:$(sqlServerFqdn),1433;Initial Catalog=$(sqlDatabaseName);User ID=$(sqlAdministratorLogin);Password=$env:SQL_ADMIN_PASSWORD;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;"
+
+                  & $bundle --connection $connectionString
+                  if ($LASTEXITCODE -ne 0) { throw "Database migration failed with exit code $LASTEXITCODE" }
+                  Write-Host 'Database migrations applied.'
+
+            - task: AzureCLI@2
+              displayName: 'Remove the temporary SQL firewall rule'
+              condition: always()
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                scriptType: pscore
+                scriptLocation: inlineScript
+                inlineScript: |
+                  $server = "$(sqlServerFqdn)".Split('.')[0]
+                  az sql server firewall-rule delete `
+                    --resource-group "${{ parameters.resourceGroupName }}" `
+                    --server $server `
+                    --name "pipeline-$(Build.BuildId)" `
+                    --output none 2>$null
+                  exit 0
+
+            - task: AzureWebApp@1
+              displayName: 'Deploy the App Service package (API + Angular + WebJobs)'
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                appType: webApp
+                appName: $(appServiceName)
+                package: '$(Pipeline.Workspace)/app-package/DemoTaskManager.zip'
+                deploymentMethod: zipDeploy
+
+            - task: PowerShell@2
+              displayName: 'Smoke test /health'
+              inputs:
+                pwsh: true
+                targetType: inline
+                script: |
+                  $ErrorActionPreference = 'Stop'
+                  $url = "$(healthCheckUrl)"
+                  if ([string]::IsNullOrWhiteSpace($url)) { $url = "https://$(appServiceName).azurewebsites.net/health" }
+
+                  for ($attempt = 1; $attempt -le 8; $attempt++) {
+                    Start-Sleep -Seconds 15
+                    try {
+                      $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30
+                      if ($response.StatusCode -eq 200) {
+                        Write-Host "Health check passed: $url"
+                        exit 0
+                      }
+                    }
+                    catch {
+                      Write-Host "attempt $attempt not ready yet"
+                    }
+                  }
+
+                  throw "Health check failed for $url"

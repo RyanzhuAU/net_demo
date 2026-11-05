@@ -1,0 +1,134 @@
+# Builds, lints, tests and packages the whole solution, then publishes pipeline artifacts.
+parameters:
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+  - name: dotnetVersion
+    type: string
+    default: '10.0.x'
+  - name: nodeVersion
+    type: string
+    default: '22.22.3'
+  - name: vmImageName
+    type: string
+    default: 'windows-latest'
+  - name: triggeredWebJobName
+    type: string
+    default: 'reminder-sweep'
+  - name: continuousWebJobName
+    type: string
+    default: 'task-processor'
+
+jobs:
+  - job: BuildAndPackage
+    displayName: Build, test and package
+    pool:
+      vmImage: ${{ parameters.vmImageName }}
+    variables:
+      webDirectory: '$(Build.SourcesDirectory)/src/DemoTaskManager.Web'
+      artifactDirectory: '$(Build.ArtifactStagingDirectory)'
+    steps:
+      - checkout: self
+        fetchDepth: 1
+
+      - task: UseDotNet@2
+        displayName: 'Install .NET SDK ${{ parameters.dotnetVersion }}'
+        inputs:
+          packageType: sdk
+          version: ${{ parameters.dotnetVersion }}
+          includePreviewVersions: false
+
+      - task: NodeTool@0
+        displayName: 'Install Node.js ${{ parameters.nodeVersion }}'
+        inputs:
+          versionSpec: ${{ parameters.nodeVersion }}
+
+      - script: npm ci
+        displayName: 'npm ci'
+        workingDirectory: $(webDirectory)
+
+      - script: npm run lint
+        displayName: 'Angular lint'
+        workingDirectory: $(webDirectory)
+
+      - script: npm run test:ci
+        displayName: 'Angular unit tests'
+        workingDirectory: $(webDirectory)
+
+      - script: npm run build
+        displayName: 'Angular production build'
+        workingDirectory: $(webDirectory)
+
+      - script: dotnet restore DemoTaskManager.sln
+        displayName: 'dotnet restore'
+        workingDirectory: $(Build.SourcesDirectory)
+
+      - script: dotnet build DemoTaskManager.sln --configuration ${{ parameters.buildConfiguration }} --no-restore
+        displayName: 'dotnet build'
+        workingDirectory: $(Build.SourcesDirectory)
+
+      - task: DotNetCoreCLI@2
+        displayName: 'dotnet test'
+        inputs:
+          command: test
+          projects: '$(Build.SourcesDirectory)/tests/**/*.Tests.csproj'
+          arguments: '--configuration ${{ parameters.buildConfiguration }} --no-build --logger trx --collect:"XPlat Code Coverage"'
+          publishTestResults: true
+
+      - task: PowerShell@2
+        displayName: 'Publish API, WebJobs, EF bundle and create the App Service ZIP'
+        inputs:
+          filePath: '$(Build.SourcesDirectory)/scripts/publish.ps1'
+          arguments: >-
+            -Configuration ${{ parameters.buildConfiguration }}
+            -OutputDirectory "$(artifactDirectory)"
+            -TriggeredJobName ${{ parameters.triggeredWebJobName }}
+            -ContinuousJobName ${{ parameters.continuousWebJobName }}
+            -SkipAngularBuild
+          pwsh: true
+          workingDirectory: $(Build.SourcesDirectory)
+
+      - task: PowerShell@2
+        displayName: 'Verify WebJob packaging layout'
+        inputs:
+          pwsh: true
+          targetType: inline
+          script: |
+            $ErrorActionPreference = 'Stop'
+            $required = @(
+              "$(artifactDirectory)/app/wwwroot/index.html",
+              "$(artifactDirectory)/app/App_Data/jobs/triggered/${{ parameters.triggeredWebJobName }}/run.cmd",
+              "$(artifactDirectory)/app/App_Data/jobs/triggered/${{ parameters.triggeredWebJobName }}/settings.job",
+              "$(artifactDirectory)/app/App_Data/jobs/continuous/${{ parameters.continuousWebJobName }}/run.cmd",
+              "$(artifactDirectory)/app/App_Data/jobs/continuous/${{ parameters.continuousWebJobName }}/settings.job",
+              "$(artifactDirectory)/DemoTaskManager.zip",
+              "$(artifactDirectory)/migrations/efbundle.exe"
+            )
+            foreach ($path in $required) {
+              if (-not (Test-Path $path)) { throw "Missing expected artifact: $path" }
+              Write-Host "ok $path"
+            }
+
+      - task: AzureCLI@2
+        displayName: 'Bicep lint and build'
+        condition: succeeded()
+        inputs:
+          azureSubscription: $(azureServiceConnection)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            az bicep install
+            az bicep build --file "$(Build.SourcesDirectory)/infrastructure/main.bicep" --stdout > $null
+        continueOnError: true
+
+      - publish: '$(artifactDirectory)/DemoTaskManager.zip'
+        artifact: app-package
+        displayName: 'Publish App Service package'
+
+      - publish: '$(artifactDirectory)/migrations'
+        artifact: migrations
+        displayName: 'Publish EF Core migration bundle'
+
+      - publish: '$(Build.SourcesDirectory)/infrastructure'
+        artifact: infrastructure
+        displayName: 'Publish Bicep templates'

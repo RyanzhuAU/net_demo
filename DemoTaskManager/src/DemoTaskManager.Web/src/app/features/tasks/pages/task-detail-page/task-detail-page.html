@@ -1,0 +1,72 @@
+<section class="page">
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a routerLink="/tasks">Tasks</a>
+    <span aria-hidden="true">/</span>
+    <span>Details</span>
+  </nav>
+
+  @if (loading()) {
+    <app-loading-spinner label="Loading task…" />
+  } @else if (failed() || !task()) {
+    <app-empty-state title="Task not found" message="It may have been deleted by someone else.">
+      <a class="button" routerLink="/tasks">Back to tasks</a>
+    </app-empty-state>
+  } @else if (task(); as item) {
+    <header class="detail__header">
+      <h1 class="detail__title" data-testid="task-title">{{ item.title }}</h1>
+      <app-status-badge [status]="item.status" />
+    </header>
+
+    <dl class="detail__grid">
+      <dt>Description</dt>
+      <dd>{{ item.description || 'No description provided.' }}</dd>
+
+      <dt>Due (UTC)</dt>
+      <dd>
+        {{ item.dueDateUtc ? (item.dueDateUtc | date: 'yyyy-MM-dd HH:mm' : 'UTC') : '—' }}
+        @if (item.isOverdue) {
+          <span class="detail__flag">Overdue</span>
+        }
+      </dd>
+
+      <dt>Created (UTC)</dt>
+      <dd>{{ item.createdAtUtc | date: 'yyyy-MM-dd HH:mm' : 'UTC' }}</dd>
+
+      <dt>Updated (UTC)</dt>
+      <dd>{{ item.updatedAtUtc ? (item.updatedAtUtc | date: 'yyyy-MM-dd HH:mm' : 'UTC') : '—' }}</dd>
+
+      <dt>Reminder processed</dt>
+      <dd>{{ item.isReminderSent ? 'Yes' : 'No' }}</dd>
+    </dl>
+
+    <div class="detail__actions">
+      <a class="button button--primary" [routerLink]="['/tasks', item.id, 'edit']">Edit</a>
+      <button
+        type="button"
+        class="button"
+        data-testid="process-task"
+        [disabled]="processing()"
+        (click)="onProcess()"
+      >
+        {{ processing() ? 'Queuing…' : 'Send to Service Bus' }}
+      </button>
+      <button
+        type="button"
+        class="button button--danger"
+        data-testid="delete-task"
+        (click)="confirmingDelete.set(true)"
+      >
+        Delete
+      </button>
+    </div>
+
+    <app-confirm-dialog
+      [open]="confirmingDelete()"
+      title="Delete task"
+      [message]="'Delete “' + item.title + '”? This cannot be undone.'"
+      confirmLabel="Delete"
+      (confirmed)="onDeleteConfirmed()"
+      (cancelled)="confirmingDelete.set(false)"
+    />
+  }
+</section>

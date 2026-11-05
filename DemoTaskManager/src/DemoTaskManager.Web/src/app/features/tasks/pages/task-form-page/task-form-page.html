@@ -1,0 +1,102 @@
+<section class="page">
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a routerLink="/tasks">Tasks</a>
+    <span aria-hidden="true">/</span>
+    <span>{{ heading() }}</span>
+  </nav>
+
+  <h1 class="form__heading">{{ heading() }}</h1>
+
+  @if (loading()) {
+    <app-loading-spinner label="Loading task…" />
+  } @else if (loadFailed()) {
+    <app-empty-state title="Task not found" message="It may have been deleted by someone else.">
+      <a class="button" routerLink="/tasks">Back to tasks</a>
+    </app-empty-state>
+  } @else {
+    <form class="form" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+      <div class="form__field">
+        <label for="title">Title <span aria-hidden="true">*</span></label>
+        <input
+          id="title"
+          type="text"
+          formControlName="title"
+          data-testid="title-input"
+          [attr.maxlength]="titleMaxLength"
+          [attr.aria-invalid]="form.controls.title.invalid && form.controls.title.touched"
+          aria-describedby="title-error"
+          required
+        />
+        <app-field-error
+          id="title-error"
+          label="Title"
+          [control]="form.controls.title"
+          [serverErrors]="serverErrorsFor('title')"
+        />
+      </div>
+
+      <div class="form__field">
+        <label for="description">Description</label>
+        <textarea
+          id="description"
+          rows="4"
+          formControlName="description"
+          data-testid="description-input"
+          [attr.maxlength]="descriptionMaxLength"
+          aria-describedby="description-error"
+        ></textarea>
+        <app-field-error
+          id="description-error"
+          label="Description"
+          [control]="form.controls.description"
+          [serverErrors]="serverErrorsFor('description')"
+        />
+      </div>
+
+      <div class="form__row">
+        <div class="form__field">
+          <label for="status">Status</label>
+          <select id="status" formControlName="status" data-testid="status-input">
+            @for (option of statuses; track option) {
+              <option [value]="option">{{ statusLabels[option] }}</option>
+            }
+          </select>
+          <app-field-error
+            label="Status"
+            [control]="form.controls.status"
+            [serverErrors]="serverErrorsFor('status')"
+          />
+        </div>
+
+        <div class="form__field">
+          <label for="dueDate">Due date (local time)</label>
+          <input
+            id="dueDate"
+            type="datetime-local"
+            formControlName="dueDateLocal"
+            data-testid="due-date-input"
+            aria-describedby="dueDate-help"
+          />
+          <p id="dueDate-help" class="form__help">Stored and displayed in UTC.</p>
+          <app-field-error
+            label="Due date"
+            [control]="form.controls.dueDateLocal"
+            [serverErrors]="serverErrorsFor('dueDateUtc')"
+          />
+        </div>
+      </div>
+
+      <div class="form__actions">
+        <button
+          type="submit"
+          class="button button--primary"
+          data-testid="submit-task"
+          [disabled]="saving()"
+        >
+          {{ saving() ? 'Saving…' : isEditMode() ? 'Save changes' : 'Create task' }}
+        </button>
+        <a class="button" routerLink="/tasks">Cancel</a>
+      </div>
+    </form>
+  }
+</section>

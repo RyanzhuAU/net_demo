@@ -1,0 +1,93 @@
+:host {
+  display: block;
+}
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  z-index: 100;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-header__inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+}
+
+.app-header__brand {
+  font-weight: 700;
+}
+
+.app-header__nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.app-header__nav a {
+  text-decoration: none;
+  color: var(--color-muted);
+  padding-bottom: 0.15rem;
+  border-bottom: 2px solid transparent;
+}
+
+.app-header__nav a.is-active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.app-header__env {
+  margin-left: auto;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-muted);
+}
+
+.app-header__progress {
+  height: 3px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.app-header__progress.is-active {
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% {
+    background-position: -40% 0;
+  }
+
+  100% {
+    background-position: 140% 0;
+  }
+}
+
+.app-main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  outline: none;
+}

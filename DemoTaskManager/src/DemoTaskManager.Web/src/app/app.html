@@ -1,0 +1,27 @@
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<header class="app-header">
+  <div class="app-header__inner">
+    <span class="app-header__brand">{{ title }}</span>
+    <nav class="app-header__nav" aria-label="Main">
+      <a routerLink="/tasks" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }">
+        Tasks
+      </a>
+      <a routerLink="/tasks/new" routerLinkActive="is-active">New task</a>
+    </nav>
+    <span class="app-header__env" title="Runtime environment">{{ config.environmentName }}</span>
+  </div>
+  <div
+    class="app-header__progress"
+    role="progressbar"
+    aria-label="Loading"
+    [attr.aria-busy]="loading.isLoading()"
+    [class.is-active]="loading.isLoading()"
+  ></div>
+</header>
+
+<main id="main-content" class="app-main" tabindex="-1">
+  <router-outlet />
+</main>
+
+<app-notification-list />

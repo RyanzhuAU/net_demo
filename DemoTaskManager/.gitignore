@@ -1,0 +1,67 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+*.user
+*.suo
+*.userprefs
+
+## .NET
+project.lock.json
+project.fragment.lock.json
+*.nuget.props
+*.nuget.targets
+BenchmarkDotNet.Artifacts/
+
+## Test results
+[Tt]est[Rr]esult*/
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+*.trx
+
+## Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.sln.docstates
+*.userosscache
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+
+## Node / Angular
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+
+## Local secrets - never commit real values
+*.local.json
+appsettings.*.local.json
+.env
+.env.*
+!.env.example
+secrets.json
+*.pfx
+*.pem
+*.key
+local.settings.json
+
+## Azure / infrastructure
+*.azurePubxml
+*.pubxml
+*.pubxml.user
+infrastructure/**/*.json
+!infrastructure/main.parameters.*.json
+
+## OS
+.DS_Store
+Thumbs.db

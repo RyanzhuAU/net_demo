@@ -1,0 +1,67 @@
+<section class="page">
+  <header class="page__header">
+    <div>
+      <h1 class="page__title">Tasks</h1>
+      <p class="page__subtitle">Create, track and process work items.</p>
+    </div>
+    <a class="button button--primary" routerLink="/tasks/new" data-testid="create-task">New task</a>
+  </header>
+
+  <app-task-filter
+    [status]="status()"
+    [search]="search()"
+    (statusChange)="onStatusChange($event)"
+    (searchChange)="onSearchChange($event)"
+    (filtersReset)="onResetFilters()"
+  />
+
+  @if (loading()) {
+    <app-loading-spinner label="Loading tasks…" />
+  } @else if (failed()) {
+    <app-empty-state
+      title="Tasks could not be loaded"
+      message="The API did not respond as expected."
+      data-testid="error-state"
+    >
+      <button type="button" class="button" (click)="reload()">Try again</button>
+    </app-empty-state>
+  } @else if (isEmpty()) {
+    <app-empty-state
+      title="No tasks found"
+      [message]="
+        hasFilters()
+          ? 'No tasks match the current filters.'
+          : 'Create your first task to get started.'
+      "
+      data-testid="empty-state"
+    >
+      @if (hasFilters()) {
+        <button type="button" class="button" (click)="onResetFilters()">Clear filters</button>
+      } @else {
+        <a class="button button--primary" routerLink="/tasks/new">New task</a>
+      }
+    </app-empty-state>
+  } @else {
+    <app-task-table [tasks]="result().items" (deleteRequested)="onDeleteRequested($event)" />
+
+    <app-pagination
+      [pageNumber]="result().pageNumber"
+      [pageSize]="result().pageSize"
+      [totalPages]="result().totalPages"
+      [totalCount]="result().totalCount"
+      [hasPreviousPage]="result().hasPreviousPage"
+      [hasNextPage]="result().hasNextPage"
+      (pageChange)="onPageChange($event)"
+      (pageSizeChange)="onPageSizeChange($event)"
+    />
+  }
+
+  <app-confirm-dialog
+    [open]="pendingDeletion() !== null"
+    title="Delete task"
+    [message]="'Delete “' + (pendingDeletion()?.title ?? '') + '”? This cannot be undone.'"
+    confirmLabel="Delete"
+    (confirmed)="onDeleteConfirmed()"
+    (cancelled)="onDeleteCancelled()"
+  />
+</section>

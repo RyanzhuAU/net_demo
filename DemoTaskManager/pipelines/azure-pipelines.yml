@@ -1,0 +1,130 @@
+# Demo Task Manager - build, infrastructure and application deployment pipeline.
+#
+# Required pipeline variables (define them in a variable group per environment, never here):
+#   azureServiceConnection   Azure Resource Manager service connection name
+#   subscriptionId           Target Azure subscription id
+#   resourceGroupName        Target resource group
+#   environmentName          dev | test | prod
+#   location                 Azure region, e.g. westeurope
+#   appServiceName           Populated by the infrastructure stage output
+#   sqlAdministratorLogin    SQL administrator login
+#   sqlAdministratorPassword SQL administrator password (mark as secret)
+#   sqlConnectionString      Optional pre-built connection string (mark as secret)
+#   serviceBusNamespace      Service Bus namespace name
+#   serviceBusQueueName      Service Bus queue name (task-processing)
+
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+  paths:
+    exclude:
+      - docs/*
+      - README.md
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: nodeVersion
+    value: '22.22.3'
+  - name: triggeredWebJobName
+    value: 'reminder-sweep'
+  - name: continuousWebJobName
+    value: 'task-processor'
+  - name: vmImageName
+    value: 'windows-latest'
+
+stages:
+  - stage: Build
+    displayName: Build and test
+    jobs:
+      - template: templates/build.yml
+        parameters:
+          buildConfiguration: $(buildConfiguration)
+          dotnetVersion: $(dotnetVersion)
+          nodeVersion: $(nodeVersion)
+          vmImageName: $(vmImageName)
+          triggeredWebJobName: $(triggeredWebJobName)
+          continuousWebJobName: $(continuousWebJobName)
+
+  - stage: Dev
+    displayName: Deploy to dev
+    dependsOn: Build
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+      - group: demo-task-manager-dev
+    jobs:
+      - template: templates/deploy-infrastructure.yml
+        parameters:
+          environment: 'demo-task-manager-dev'
+          environmentName: 'dev'
+          vmImageName: $(vmImageName)
+          azureServiceConnection: $(azureServiceConnection)
+          resourceGroupName: $(resourceGroupName)
+          location: $(location)
+      - template: templates/deploy-application.yml
+        parameters:
+          environment: 'demo-task-manager-dev'
+          environmentName: 'dev'
+          vmImageName: $(vmImageName)
+          azureServiceConnection: $(azureServiceConnection)
+          resourceGroupName: $(resourceGroupName)
+          dependsOnJob: 'DeployInfrastructure'
+
+  - stage: Test
+    displayName: Deploy to test
+    dependsOn: Dev
+    condition: succeeded()
+    variables:
+      - group: demo-task-manager-test
+    jobs:
+      - template: templates/deploy-infrastructure.yml
+        parameters:
+          environment: 'demo-task-manager-test'
+          environmentName: 'test'
+          vmImageName: $(vmImageName)
+          azureServiceConnection: $(azureServiceConnection)
+          resourceGroupName: $(resourceGroupName)
+          location: $(location)
+      - template: templates/deploy-application.yml
+        parameters:
+          environment: 'demo-task-manager-test'
+          environmentName: 'test'
+          vmImageName: $(vmImageName)
+          azureServiceConnection: $(azureServiceConnection)
+          resourceGroupName: $(resourceGroupName)
+          dependsOnJob: 'DeployInfrastructure'
+
+  - stage: Prod
+    displayName: Deploy to production
+    dependsOn: Test
+    # The 'demo-task-manager-prod' environment must have a manual approval check configured
+    # in Azure DevOps; that check gates every job in this stage.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: demo-task-manager-prod
+    jobs:
+      - template: templates/deploy-infrastructure.yml
+        parameters:
+          environment: 'demo-task-manager-prod'
+          environmentName: 'prod'
+          vmImageName: $(vmImageName)
+          azureServiceConnection: $(azureServiceConnection)
+          resourceGroupName: $(resourceGroupName)
+          location: $(location)
+      - template: templates/deploy-application.yml
+        parameters:
+          environment: 'demo-task-manager-prod'
+          environmentName: 'prod'
+          vmImageName: $(vmImageName)
+          azureServiceConnection: $(azureServiceConnection)
+          resourceGroupName: $(resourceGroupName)
+          dependsOnJob: 'DeployInfrastructure'

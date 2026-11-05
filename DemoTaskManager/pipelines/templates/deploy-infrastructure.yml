@@ -1,0 +1,93 @@
+# Validates and deploys the Bicep infrastructure for one environment.
+parameters:
+  - name: environment
+    type: string
+  - name: environmentName
+    type: string
+  - name: vmImageName
+    type: string
+    default: 'windows-latest'
+  - name: azureServiceConnection
+    type: string
+  - name: resourceGroupName
+    type: string
+  - name: location
+    type: string
+  - name: applicationName
+    type: string
+    default: 'demotask'
+
+jobs:
+  - deployment: DeployInfrastructure
+    displayName: 'Deploy infrastructure (${{ parameters.environmentName }})'
+    environment: ${{ parameters.environment }}
+    pool:
+      vmImage: ${{ parameters.vmImageName }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: current
+              artifact: infrastructure
+
+            - task: AzureCLI@2
+              displayName: 'Validate Bicep template'
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                scriptType: pscore
+                scriptLocation: inlineScript
+                inlineScript: |
+                  $ErrorActionPreference = 'Stop'
+                  az group create `
+                    --name "${{ parameters.resourceGroupName }}" `
+                    --location "${{ parameters.location }}" `
+                    --output none
+
+                  az deployment group validate `
+                    --resource-group "${{ parameters.resourceGroupName }}" `
+                    --template-file "$(Pipeline.Workspace)/infrastructure/main.bicep" `
+                    --parameters `
+                      applicationName="${{ parameters.applicationName }}" `
+                      environmentName="${{ parameters.environmentName }}" `
+                      location="${{ parameters.location }}" `
+                      sqlAdministratorLogin="$(sqlAdministratorLogin)" `
+                      sqlAdministratorPassword="$(sqlAdministratorPassword)" `
+                    --output none
+
+            - task: AzureCLI@2
+              displayName: 'Deploy Bicep template'
+              name: deployBicep
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                scriptType: pscore
+                scriptLocation: inlineScript
+                inlineScript: |
+                  $ErrorActionPreference = 'Stop'
+                  $deploymentName = "demotaskmanager-${{ parameters.environmentName }}-$(Build.BuildId)"
+
+                  az deployment group create `
+                    --resource-group "${{ parameters.resourceGroupName }}" `
+                    --name $deploymentName `
+                    --template-file "$(Pipeline.Workspace)/infrastructure/main.bicep" `
+                    --parameters `
+                      applicationName="${{ parameters.applicationName }}" `
+                      environmentName="${{ parameters.environmentName }}" `
+                      location="${{ parameters.location }}" `
+                      sqlAdministratorLogin="$(sqlAdministratorLogin)" `
+                      sqlAdministratorPassword="$(sqlAdministratorPassword)" `
+                    --output none
+
+                  $outputs = az deployment group show `
+                    --resource-group "${{ parameters.resourceGroupName }}" `
+                    --name $deploymentName `
+                    --query properties.outputs -o json | ConvertFrom-Json
+
+                  # Values flow to the application stage as output variables; no secrets are emitted.
+                  Write-Host "##vso[task.setvariable variable=appServiceName;isOutput=true]$($outputs.appServiceName.value)"
+                  Write-Host "##vso[task.setvariable variable=healthCheckUrl;isOutput=true]$($outputs.healthCheckUrl.value)"
+                  Write-Host "##vso[task.setvariable variable=sqlServerFqdn;isOutput=true]$($outputs.sqlServerFqdn.value)"
+                  Write-Host "##vso[task.setvariable variable=sqlDatabaseName;isOutput=true]$($outputs.sqlDatabaseName.value)"
+                  Write-Host "##vso[task.setvariable variable=serviceBusNamespaceName;isOutput=true]$($outputs.serviceBusNamespaceName.value)"
+
+                  Write-Host "App Service   : $($outputs.appServiceName.value)"
+                  Write-Host "Health check  : $($outputs.healthCheckUrl.value)"

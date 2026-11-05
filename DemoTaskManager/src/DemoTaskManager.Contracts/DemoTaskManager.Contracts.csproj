@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>DemoTaskManager.Contracts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DemoTaskManager.Domain\DemoTaskManager.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
