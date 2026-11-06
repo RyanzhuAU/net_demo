@@ -7,6 +7,12 @@ export const routes: Routes = [
     loadChildren: () => import('./features/tasks/task.routes').then((m) => m.TASK_ROUTES),
   },
   {
+  path: 'about',
+  title: 'About · Demo Task Manager',
+  loadComponent: () =>
+    import('./features/about/about-page/about-page').then((m) => m.AboutPage),
+  },
+  {
     path: 'not-found',
     title: 'Not found · Demo Task Manager',
     loadComponent: () => import('./features/not-found/not-found-page').then((m) => m.NotFoundPage),

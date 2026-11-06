@@ -1,0 +1,23 @@
+<section class="page">
+  <header class="about__header">
+    <h1>About</h1>
+    <a class="button" routerLink="/tasks">Back to tasks</a>
+  </header>
+
+  @if (state().loading) {
+    <app-loading-spinner label="Loading application information…" />
+  } @else if (state().info; as info) {
+    <article class="about__content">
+      <h2 data-testid="application-name">{{ info.applicationName }}</h2>
+      <p data-testid="application-description">{{ info.description }}</p>
+    </article>
+  } @else {
+    <app-empty-state
+      title="About information could not be loaded"
+      message="The API did not respond as expected."
+      data-testid="about-error"
+    >
+      <button type="button" class="button" (click)="retry()">Try again</button>
+    </app-empty-state>
+  }
+</section>
