@@ -4,6 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { AppConfigService } from '../../../core/config/app-config.service';
 import { apiBaseUrlInterceptor } from '../../../core/interceptors/api-base-url.interceptor';
 import { AboutPage } from './about-page';
@@ -16,6 +17,7 @@ describe('AboutPage', () => {
     await TestBed.configureTestingModule({
       imports: [AboutPage],
       providers: [
+        provideRouter([]),
         provideHttpClient(withInterceptors([apiBaseUrlInterceptor])),
         provideHttpClientTesting(),
       ],
